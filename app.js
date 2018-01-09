@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const config = require('./config.json');
 const nodemailer = require('nodemailer');
+const zlib = require('zlib');
 const filterRegExp = /(?:)/;//new RegExp('');
 const algorithm = 'sha256';
 
@@ -22,7 +23,7 @@ function iterateFiles(startPath, filter, callback) {
         else if (filter.test(filename)) {
             callback(filename);
         }
-    };
+    }
 }
 
 function checksum(str = '', algorithm, encoding) {
@@ -30,7 +31,7 @@ function checksum(str = '', algorithm, encoding) {
         .createHash(algorithm || 'md5')
         .update(str, 'utf8')
         .digest(encoding || 'hex');
-};
+}
 
 function sendmail(smtpTransport, message) {
     smtpTransport.sendMail(message, (error, response) => {
@@ -42,15 +43,20 @@ function sendmail(smtpTransport, message) {
     });
 }
 
-function getMailMessage(cfg, checkResults) {
+function getMailMessage(cfg, checkResults, compress) {
     let mailSubject = cfg.mail.subject || 'no subject';
     let mailBody = `algorithm: ${algorithm}\r\nexecution timestamp: ${new Date().toLocaleString()}\r\n\r\n`;
-
     let attachments = [];
     for (let result of checkResults) {
         let { appName, hashResult } = result;
-        attachments.push({ filename: `${appName}.txt`, content: hashResult });
-        mailBody += `${appName}: ${checksum(hashResult, algorithm)}\r\n`;
+        let attach;
+        if (compress) {
+            attach = { filename: `${appName}.txt.gz`, content: compress(hashResult), contentType: 'application/x-gzip' }
+        } else {
+            attach = { filename: `${appName}.txt`, content: hashResult, contentType: 'text/plain' }
+        }
+        attachments.push(attach);
+        mailBody += `${attach.filename}: ${checksum(attach.content, algorithm)}\r\n`;
     }
 
    return {
@@ -102,7 +108,7 @@ function go() {
     for (let cfg of checksumCfgs) {
         try {
             let checkResults = startCheckAndGetResult(cfg);
-            let mailMessage = getMailMessage(cfg, checkResults);
+            let mailMessage = getMailMessage(cfg, checkResults, input => zlib.gzipSync(input));
             sendmail(transporter, mailMessage);
         }
         catch (ex) {
