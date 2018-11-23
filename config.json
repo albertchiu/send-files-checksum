@@ -18,6 +18,8 @@
                 {
                     "appName": "DEF",
                     "startPath": "Z:\\WEB\\DEF"
+                    "regExp": "^(?!.*\\.log|\/home\/ignore\/).+$",
+                    "diff": true
                 }
             ]
         }
